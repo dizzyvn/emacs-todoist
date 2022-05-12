@@ -217,7 +217,7 @@ TODO is boolean to show TODO tag."
              (not-empty (> (length description) 0)))
     (insert (replace-regexp-in-string (rx line-start) (make-string level ?\s) description)))
   (todoist-refile-copy-to todoist-refile-file todoist-refile-headline)
-  (todoist-delete-task))
+  (todoist--query "DELETE" (format "/tasks/%s" (todoist--under-cursor-task-id))))
 
 (defun todoist--insert-project (project tasks)
   "Insert the current project and matching tasks as org buttet list.
@@ -383,7 +383,6 @@ P is a prefix argument to select a project."
   (interactive)
   (org-todo "DONE")
   (todoist--query "POST" (format "/tasks/%s/close" (todoist--under-cursor-task-id))))
-
 
 (defun todoist--write-to-file-if-needed ()
   "Write todoist buffer to file if backing-buffer is defined."
