@@ -88,7 +88,25 @@
   :group 'todoist
   :type 'string)
 
+(defcustom todoist-refile-file nil
+  "If not nil, refile to this file"
+  :group 'todoist
+  :type 'string)
+
+(defcustom todoist-refile-headline nil
+  "If not nil, refile to this file"
+  :group 'todoist
+  :type 'string)
+
 (defvar todoist--cached-projects nil)
+
+(defun todoist-refile-copy-to (file headline)
+  "Move current headline to specified location"
+  (let ((pos (save-excursion
+               (find-file file)
+               (org-find-exact-headline-in-buffer headline))))
+    (let ((org-refile-keep t))
+      (org-refile nil nil (list headline file nil pos) "Copy"))))
 
 (defun todoist--query (method endpoint &optional data)
   "Main function to interact with Todoist api.
@@ -109,7 +127,7 @@ DATA is the request body."
           (throw 'bad-response (format "Bad status code returned: %s" status))))
       (goto-char url-http-end-of-headers)
       (setq response (unless (string-equal (buffer-substring (point) (point-max)) "\n") ;; no body
-                    (json-read-from-string (decode-coding-region (point) (point-max) 'utf-8 t))))
+                       (json-read-from-string (decode-coding-region (point) (point-max) 'utf-8 t))))
       (kill-buffer (current-buffer)) ;; kill the buffer to free up some memory
       response)))
 
@@ -161,7 +179,7 @@ PROJECT is the project object."
 
 TASK is the task object"
 
-    (assoc-default 'description task))
+  (assoc-default 'description task))
 
 (defun todoist--filter-tasks (project tasks)
   "Get subset of tasks under a project.
@@ -197,7 +215,9 @@ TODO is boolean to show TODO tag."
   (goto-char (point-max))
   (when-let ((description (todoist--task-description task))
              (not-empty (> (length description) 0)))
-    (insert (replace-regexp-in-string (rx line-start) (make-string level ?\s) description))))
+    (insert (replace-regexp-in-string (rx line-start) (make-string level ?\s) description)))
+  (todoist-refile-copy-to todoist-refile-file todoist-refile-headline)
+  (todoist-delete-task))
 
 (defun todoist--insert-project (project tasks)
   "Insert the current project and matching tasks as org buttet list.
@@ -205,7 +225,7 @@ TODO is boolean to show TODO tag."
 PROJECT the project object.
 TASKS the list of all tasks."
   (todoist--insert-heading 2 (todoist--project-name project))
-  (mapcar (lambda (task) (todoist--insert-task task 3 nil))
+  (mapcar (lambda (task) (todoist--insert-task task 3 t))
           (todoist--filter-tasks project tasks)))
 
 (defun todoist--inbox-id (projects)
@@ -356,14 +376,13 @@ P is a prefix argument to select a project."
 (defun todoist-delete-task ()
   "Delete the task under the cusror."
   (interactive)
-  (todoist--query "DELETE" (format "/tasks/%s" (todoist--under-cursor-task-id)))
-  (todoist))
+  (todoist--query "DELETE" (format "/tasks/%s" (todoist--under-cursor-task-id))))
 
 (defun todoist-close-task ()
   "Close the task under the cursor, marking it as done or checking it."
   (interactive)
-  (todoist--query "POST" (format "/tasks/%s/close" (todoist--under-cursor-task-id)))
-  (todoist))
+  (org-todo "DONE")
+  (todoist--query "POST" (format "/tasks/%s/close" (todoist--under-cursor-task-id))))
 
 
 (defun todoist--write-to-file-if-needed ()
@@ -394,34 +413,35 @@ P is a prefix argument to select a project."
   (let ((map (make-sparse-keymap)))
     (define-key map (kbd "C-x t") 'todoist-task-menu)
     (define-key map (kbd "C-x p") 'todoist-project-menu)
-   map)
+    map)
   "Keymap for `todoist-mode'.")
 
 (define-derived-mode todoist-mode org-mode "Todoist"
   "Special mode for todoist buffers.")
 
-;;;###autoload
+  ;;;###autoload  
 (defun todoist ()
   "Main function to summon the todoist dashboard as 'org-mode'."
   (interactive)
   (let ((projects (todoist--get-projects))
-         (tasks (todoist--get-tasks)))
+        (tasks (todoist--get-tasks)))
     (with-temp-buffer todoist-buffer-name
-      (pop-to-buffer todoist-buffer-name)
-      (delete-region (point-min) (point-max))
-      (todoist-mode)
-      (insert "#+title: Todoist\n")
-      (todoist--insert-heading 1 "Today")
-      (todoist--insert-today tasks)
-      (todoist--insert-heading 1 "Projects")
-      (dolist (p projects) (todoist--insert-project p tasks))
-      (if todoist-show-all
-          (todoist--show-all)
-        (todoist--fold-projects)
-        (todoist--fold-today))
-      (todoist--write-to-file-if-needed)
-      ;; Global hook, not local, because it's called from the refile destination.
-      (add-hook 'org-after-refile-insert-hook #'todoist--refile-handler))))
+                      (pop-to-buffer todoist-buffer-name)
+                      (delete-region (point-min) (point-max))
+                      (todoist-mode)
+                      (insert "#+title: Todoist\n")
+                      (todoist--insert-heading 1 "Today")
+                      (todoist--insert-today tasks)
+                      (todoist--insert-heading 1 "Projects")
+                      (dolist (p projects) (todoist--insert-project p tasks))
+                      (if todoist-show-all
+                          (todoist--show-all)
+                        (todoist--fold-projects)
+                        (todoist--fold-today))
+                      (todoist--write-to-file-if-needed)
+                      ;; Global hook, not local, because it's called from the refile destination.
+                      (add-hook 'org-after-refile-insert-hook #'todoist--refile-handler)
+                      (kill-this-buffer))))
 
 (provide 'todoist)
 ;;; todoist.el ends here
