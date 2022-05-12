@@ -100,13 +100,13 @@
 
 (defvar todoist--cached-projects nil)
 
-(defun todoist-refile-copy-to (file headline)
+(defun todoist-refile-copy ()
   "Move current headline to specified location"
   (let ((pos (save-excursion
-               (find-file file)
-               (org-find-exact-headline-in-buffer headline))))
+               (find-file todoist-refile-file)
+               (org-find-exact-headline-in-buffer todoist-refile-headline))))
     (let ((org-refile-keep t))
-      (org-refile nil nil (list headline file nil pos) "Copy"))))
+      (org-refile nil nil (list todoist-refile-headline todoist-refile-file nil pos) "Copy"))))
 
 (defun todoist--query (method endpoint &optional data)
   "Main function to interact with Todoist api.
@@ -216,7 +216,7 @@ TODO is boolean to show TODO tag."
   (when-let ((description (todoist--task-description task))
              (not-empty (> (length description) 0)))
     (insert (replace-regexp-in-string (rx line-start) (make-string level ?\s) description)))
-  (todoist-refile-copy-to todoist-refile-file todoist-refile-headline)
+  (todoist-refile-copy)
   (todoist--query "DELETE" (format "/tasks/%s" (todoist--under-cursor-task-id))))
 
 (defun todoist--insert-project (project tasks)
